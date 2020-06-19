@@ -168,6 +168,7 @@ public class MirrorCheckpointTask extends SourceTask {
         return listConsumerGroupOffsets(group).entrySet().stream()
             .filter(x -> shouldCheckpointTopic(x.getKey().topic()))
             .map(x -> checkpoint(group, x.getKey(), x.getValue()))
+            .filter(x -> x != null)
             .filter(x -> x.downstreamOffset() >= 0)  // ignore offsets we cannot translate accurately
             .collect(Collectors.toList());
     }
@@ -183,10 +184,17 @@ public class MirrorCheckpointTask extends SourceTask {
 
     Checkpoint checkpoint(String group, TopicPartition topicPartition,
             OffsetAndMetadata offsetAndMetadata) {
-        long upstreamOffset = offsetAndMetadata.offset();
-        long downstreamOffset = offsetSyncStore.translateDownstream(topicPartition, upstreamOffset);
-        return new Checkpoint(group, renameTopicPartition(topicPartition),
-            upstreamOffset, downstreamOffset, offsetAndMetadata.metadata());
+        try {
+            long upstreamOffset = offsetAndMetadata.offset();
+            long downstreamOffset = offsetSyncStore.translateDownstream(topicPartition, upstreamOffset);
+            Checkpoint tmpCheckpoint = new Checkpoint(group, renameTopicPartition(topicPartition),
+                upstreamOffset, downstreamOffset, offsetAndMetadata.metadata());
+            log.info("XXX tmpCheckpoint -- group({}) topicPartition({}) upstreamOffset({}) downstreamOffset({})", group, topicPartition, upstreamOffset, downstreamOffset);
+            return tmpCheckpoint;
+        } catch(NullPointerException e) {
+            log.error("XXX ERROR tmpCheckpoint -- group({}) topicPartition({}) offsetAndMetadata({}) {}", group, topicPartition, offsetAndMetadata, e);
+            return null;
+        }
     }
 
     SourceRecord checkpointRecord(Checkpoint checkpoint, long timestamp) {
