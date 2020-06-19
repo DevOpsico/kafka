@@ -28,11 +28,17 @@ import java.util.HashMap;
 import java.util.Collections;
 import java.time.Duration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /** Used internally by MirrorMaker. Stores offset syncs and performs offset translation. */
 class OffsetSyncStore implements AutoCloseable {
     private KafkaConsumer<byte[], byte[]> consumer;
     private Map<TopicPartition, OffsetSync> offsetSyncs = new HashMap<>();
     private TopicPartition offsetSyncTopicPartition;
+
+    private static final Logger log = LoggerFactory.getLogger(OffsetSyncStore.class);
+
 
     OffsetSyncStore(MirrorConnectorConfig config) {
         consumer = new KafkaConsumer<>(config.sourceConsumerConfig(),
@@ -49,8 +55,16 @@ class OffsetSyncStore implements AutoCloseable {
 
     long translateDownstream(TopicPartition sourceTopicPartition, long upstreamOffset) {
         OffsetSync offsetSync = latestOffsetSync(sourceTopicPartition);
-        if (offsetSync.upstreamOffset() > upstreamOffset) {
-            // Offset is too far in the past to translate accurately
+        // if (offsetSync.upstreamOffset() > upstreamOffset) {
+        // Offset is too far in the past to translate accurately }
+
+        // We want be able to translate if we have at least one checkpoint available.
+        // No matter if it's too far in the past or not.
+        if (offsetSync.upstreamOffset() == -1) {
+            log.info("---> YYY translateDownstream error: sourceTopicPartition({}) offsetSync.upstreamOffset({}) > upstreamOffset({})",
+                sourceTopicPartition,
+                offsetSync.upstreamOffset(),
+                upstreamOffset);
             return -1;
         }
         long upstreamStep = upstreamOffset - offsetSync.upstreamOffset();
@@ -72,6 +86,7 @@ class OffsetSyncStore implements AutoCloseable {
     }
 
     protected void handleRecord(ConsumerRecord<byte[], byte[]> record) {
+        log.info("offsetSyncStore - {}-{}:{}", record.topic(), record.partition(), record.offset());
         OffsetSync offsetSync = OffsetSync.deserializeRecord(record);
         TopicPartition sourceTopicPartition = offsetSync.topicPartition();
         offsetSyncs.put(sourceTopicPartition, offsetSync);
