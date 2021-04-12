@@ -191,7 +191,7 @@ public class MirrorCheckpointTask extends SourceTask {
                 upstreamOffset, downstreamOffset, offsetAndMetadata.metadata());
             log.info("XXX tmpCheckpoint -- group({}) topicPartition({}) upstreamOffset({}) downstreamOffset({})", group, topicPartition, upstreamOffset, downstreamOffset);
             return tmpCheckpoint;
-        } catch(NullPointerException e) {
+        } catch (NullPointerException e) {
             log.error("XXX ERROR tmpCheckpoint -- group({}) topicPartition({}) offsetAndMetadata({}) {}", group, topicPartition, offsetAndMetadata, e);
             return null;
         }
