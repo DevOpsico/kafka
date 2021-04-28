@@ -47,6 +47,11 @@ class MirrorMetrics implements AutoCloseable {
     private static final MetricNameTemplate RECORD_COUNT = new MetricNameTemplate(
             "record-count", SOURCE_CONNECTOR_GROUP,
             "Number of source records replicated to the target cluster.", PARTITION_TAGS);
+
+    private static final MetricNameTemplate REPLICATION_LAG = new MetricNameTemplate(
+            "replication-lag", SOURCE_CONNECTOR_GROUP,
+            "Number of source records missing to be replicated to the target cluster.", PARTITION_TAGS);
+
     private static final MetricNameTemplate RECORD_RATE = new MetricNameTemplate(
             "record-rate", SOURCE_CONNECTOR_GROUP,
             "Average number of source records replicated to the target cluster per second.", PARTITION_TAGS);
@@ -128,6 +133,10 @@ class MirrorMetrics implements AutoCloseable {
         partitionMetrics.get(topicPartition).recordSensor.record();
     }
 
+    void recordLag(TopicPartition topicPartition, long upstreamOffset, long endOffset) {
+        partitionMetrics.get(topicPartition).lagSensor.record((double) (endOffset - upstreamOffset));
+    }
+
     void recordAge(TopicPartition topicPartition, long ageMillis) {
         partitionMetrics.get(topicPartition).recordAgeSensor.record((double) ageMillis);
     }
@@ -158,6 +167,7 @@ class MirrorMetrics implements AutoCloseable {
         private final Sensor byteSensor;
         private final Sensor recordAgeSensor;
         private final Sensor replicationLatencySensor;
+        private final Sensor lagSensor;
 
         PartitionMetrics(TopicPartition topicPartition) {
             String prefix = topicPartition.topic() + "-" + topicPartition.partition() + "-";
@@ -166,6 +176,9 @@ class MirrorMetrics implements AutoCloseable {
             tags.put("target", target); 
             tags.put("topic", topicPartition.topic());
             tags.put("partition", Integer.toString(topicPartition.partition()));
+
+            lagSensor = metrics.sensor(prefix + "replication-lag");
+            lagSensor.add(metrics.metricInstance(REPLICATION_LAG, tags), new Value());
 
             recordSensor = metrics.sensor(prefix + "records-sent");
             recordSensor.add(new Meter(metrics.metricInstance(RECORD_RATE, tags), metrics.metricInstance(RECORD_COUNT, tags)));

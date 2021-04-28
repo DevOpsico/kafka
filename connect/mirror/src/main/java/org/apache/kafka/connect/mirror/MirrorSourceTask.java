@@ -36,11 +36,7 @@ import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
-import java.util.ArrayList;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.Semaphore;
 import java.time.Duration;
@@ -53,17 +49,20 @@ public class MirrorSourceTask extends SourceTask {
     private static final int MAX_OUTSTANDING_OFFSET_SYNCS = 10;
 
     private KafkaConsumer<byte[], byte[]> consumer;
+    private KafkaConsumer<byte[], byte[]> consumerForEndOffset;
     private KafkaProducer<byte[], byte[]> offsetProducer;
     private String sourceClusterAlias;
     private String offsetSyncsTopic;
     private Duration pollTimeout;
     private long maxOffsetLag;
     private Map<TopicPartition, PartitionState> partitionStates;
+    private Map<TopicPartition, LagMetricState> lagMetricStates;
     private ReplicationPolicy replicationPolicy;
     private MirrorMetrics metrics;
     private boolean stopping = false;
     private Semaphore outstandingOffsetSyncs;
     private Semaphore consumerAccess;
+    private Semaphore consumerForEndOffsetAccess;
 
     public MirrorSourceTask() {}
 
@@ -72,6 +71,8 @@ public class MirrorSourceTask extends SourceTask {
         this.sourceClusterAlias = sourceClusterAlias;
         this.replicationPolicy = replicationPolicy;
         this.maxOffsetLag = maxOffsetLag;
+        consumerAccess = new Semaphore(1);
+        consumerForEndOffsetAccess = new Semaphore(1);
     }
 
     @Override
@@ -79,14 +80,17 @@ public class MirrorSourceTask extends SourceTask {
         MirrorTaskConfig config = new MirrorTaskConfig(props);
         outstandingOffsetSyncs = new Semaphore(MAX_OUTSTANDING_OFFSET_SYNCS);
         consumerAccess = new Semaphore(1);  // let one thread at a time access the consumer
+        consumerForEndOffsetAccess = new Semaphore(1);  // let one thread at a time access the consumer
         sourceClusterAlias = config.sourceClusterAlias();
         metrics = config.metrics();
         pollTimeout = config.consumerPollTimeout();
         maxOffsetLag = config.maxOffsetLag();
         replicationPolicy = config.replicationPolicy();
         partitionStates = new HashMap<>();
+        lagMetricStates = new HashMap<>();
         offsetSyncsTopic = config.offsetSyncsTopic();
         consumer = MirrorUtils.newConsumer(config.sourceConsumerConfig());
+        consumerForEndOffset = MirrorUtils.newConsumer(config.sourceConsumerConfig());
         offsetProducer = MirrorUtils.newProducer(config.sourceProducerConfig());
         Set<TopicPartition> taskTopicPartitions = config.taskTopicPartitions();
         Map<TopicPartition, Long> topicPartitionOffsets = loadOffsets(taskTopicPartitions);
@@ -182,8 +186,31 @@ public class MirrorSourceTask extends SourceTask {
             long upstreamOffset = MirrorUtils.unwrapOffset(record.sourceOffset());
             long downstreamOffset = metadata.offset();
             maybeSyncOffsets(sourceTopicPartition, upstreamOffset, downstreamOffset);
+            maybeRecordLagMetric(sourceTopicPartition, upstreamOffset);
         } catch (Throwable e) {
             log.warn("Failure committing record.", e);
+        }
+    }
+    private void maybeRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
+        LagMetricState lagMetricState =
+                lagMetricStates.computeIfAbsent(topicPartition, x -> new LagMetricState(maxOffsetLag));
+        if (lagMetricState.update(upstreamOffset)) {
+            sendRecordLagMetric(topicPartition, upstreamOffset);
+        }
+    }
+
+    private void sendRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
+        if (!consumerForEndOffsetAccess.tryAcquire()) {
+            return;
+        }
+        try {
+            List<TopicPartition> topicPartitions = new ArrayList<>(Collections.singletonList(topicPartition));
+            Map<TopicPartition, Long> endOffsets = consumerForEndOffset.endOffsets(topicPartitions);
+            metrics.recordLag(topicPartition, upstreamOffset, endOffsets.get(topicPartition));
+        } catch (KafkaException e) {
+            log.warn("Failure maybeRecordLagMetric.", e);
+        } finally {
+            consumerForEndOffsetAccess.release();
         }
     }
 
@@ -290,4 +317,26 @@ public class MirrorSourceTask extends SourceTask {
             return shouldSyncOffsets;
         }
     }
+
+    static class LagMetricState {
+        long previousUpstreamOffset = -1L;
+        long maxOffsetLag;
+
+        LagMetricState(long maxOffsetLag) {
+            this.maxOffsetLag = maxOffsetLag;
+        }
+
+        // true if we should emit an offset sync
+        boolean update(long upstreamOffset) {
+            boolean shouldSendLagMetric = false;
+            long upstreamStep = upstreamOffset - previousUpstreamOffset;
+            if (upstreamStep >= maxOffsetLag) {
+                lastSyncUpstreamOffset = upstreamOffset;
+                shouldSendLagMetric = true;
+            }
+            previousUpstreamOffset = upstreamOffset;
+            return shouldSendLagMetric;
+        }
+    }
+
 }
