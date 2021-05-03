@@ -61,7 +61,7 @@ class OffsetSyncStore implements AutoCloseable {
         // We want be able to translate if we have at least one checkpoint available.
         // No matter if it's too far in the past or not.
         if (offsetSync.upstreamOffset() == -1) {
-            log.info("---> YYY translateDownstream error: sourceTopicPartition({}) offsetSync.upstreamOffset({}) > upstreamOffset({})",
+            log.error("Unable to translate downstream offset for sourceTopicPartition({}) offsetSync.upstreamOffset({}), upstreamOffset({})",
                 sourceTopicPartition,
                 offsetSync.upstreamOffset(),
                 upstreamOffset);

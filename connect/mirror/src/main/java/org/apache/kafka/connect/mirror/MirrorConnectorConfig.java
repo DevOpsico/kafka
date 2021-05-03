@@ -73,6 +73,7 @@ public class MirrorConnectorConfig extends AbstractConfig {
     protected static final String EMIT_HEARTBEATS = "emit.heartbeats";
     protected static final String EMIT_CHECKPOINTS = "emit.checkpoints";
     protected static final String SYNC_GROUP_OFFSETS = "sync.group.offsets";
+    protected static final String SEND_CONSUMER_GROUP_METRICS = "send.consumer_groups.metrics";
 
     public static final String ENABLED = "enabled";
     private static final String ENABLED_DOC = "Whether to replicate source->target.";
@@ -186,6 +187,10 @@ public class MirrorConnectorConfig extends AbstractConfig {
     public static final String SYNC_GROUP_OFFSETS_INTERVAL_SECONDS = SYNC_GROUP_OFFSETS + INTERVAL_SECONDS_SUFFIX;
     private static final String SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DOC = "Frequency of consumer group offset sync.";
     public static final long SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DEFAULT = 60;
+
+    public static final String SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS = SEND_CONSUMER_GROUP_METRICS + INTERVAL_SECONDS_SUFFIX;
+    private static final String SEND_CONSUMER_GROUPS_METRICS_INTERVAL_DOC = "Frequency of consumer group offset sync.";
+    public static final long SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT = 60;
 
     public static final String TOPIC_FILTER_CLASS = "topic.filter.class";
     private static final String TOPIC_FILTER_CLASS_DOC = "TopicFilter to use. Selects topics to replicate.";
@@ -430,6 +435,15 @@ public class MirrorConnectorConfig extends AbstractConfig {
         }
     }
 
+    Duration sendConsumerGroupsMetricsInterval() {
+        if (getBoolean(SYNC_GROUP_OFFSETS_ENABLED)) {
+            return Duration.ofSeconds(getLong(SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS));
+        } else {
+            // negative interval to disable
+            return Duration.ofMillis(-1);
+        }
+    }
+
     protected static final ConfigDef CONNECTOR_CONFIG_DEF = ConnectorConfig.configDef()
             .define(
                     ENABLED,
@@ -610,6 +624,12 @@ public class MirrorConnectorConfig extends AbstractConfig {
                     SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DEFAULT,
                     ConfigDef.Importance.LOW,
                     SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DOC)
+            .define(
+                    SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS,
+                    ConfigDef.Type.LONG,
+                    SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT,
+                    ConfigDef.Importance.LOW,
+                    SEND_CONSUMER_GROUPS_METRICS_INTERVAL_DOC)
             .define(
                     REPLICATION_POLICY_CLASS,
                     ConfigDef.Type.CLASS,

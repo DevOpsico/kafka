@@ -99,6 +99,9 @@ class MirrorMetrics implements AutoCloseable {
             "checkpoint-latency-ms-avg", CHECKPOINT_CONNECTOR_GROUP,
             "Average time it takes consumer group offsets to replicate from source to target cluster.", GROUP_TAGS);
 
+    private static final MetricNameTemplate CONSUMER_GROUP_DIFFRENTIAL_LAG = new MetricNameTemplate(
+            "consumer-group-differential-lag", CHECKPOINT_CONNECTOR_GROUP,
+            "lag between source consumer group and target consumer group.", GROUP_TAGS);
 
     private final Metrics metrics; 
     private final Map<TopicPartition, PartitionMetrics> partitionMetrics; 
@@ -133,8 +136,13 @@ class MirrorMetrics implements AutoCloseable {
         partitionMetrics.get(topicPartition).recordSensor.record();
     }
 
-    void recordLag(TopicPartition topicPartition, long upstreamOffset, long endOffset) {
-        partitionMetrics.get(topicPartition).lagSensor.record((double) (endOffset - upstreamOffset));
+    void recordTopicLag(TopicPartition topicPartition, long upstreamOffset, long endOffset) {
+        partitionMetrics.get(topicPartition).lagSensor.record((endOffset - upstreamOffset));
+    }
+
+    void recordConsumerGroupLag(TopicPartition topicPartition, String group, long upstreamOffset, long lastUpstreamOffset, long downstreamOffset, long lastDownstreamOffset) {
+        long differentiallag = (lastUpstreamOffset - upstreamOffset) - (lastDownstreamOffset - downstreamOffset);
+        group(topicPartition, group).differentiallagSensor.record(differentiallag);
     }
 
     void recordAge(TopicPartition topicPartition, long ageMillis) {
@@ -202,6 +210,7 @@ class MirrorMetrics implements AutoCloseable {
 
     private class GroupMetrics {
         private final Sensor checkpointLatencySensor;
+        private final Sensor differentiallagSensor;
 
         GroupMetrics(TopicPartition topicPartition, String group) {
             Map<String, String> tags = new LinkedHashMap<>();
@@ -210,7 +219,12 @@ class MirrorMetrics implements AutoCloseable {
             tags.put("group", group);
             tags.put("topic", topicPartition.topic());
             tags.put("partition", Integer.toString(topicPartition.partition()));
- 
+
+            String prefix = topicPartition.topic() + "-" + topicPartition.partition() + "-" + group + "-";
+
+            differentiallagSensor = metrics.sensor(prefix + "consumer-group-differential-lag");
+            differentiallagSensor.add(metrics.metricInstance(CONSUMER_GROUP_DIFFRENTIAL_LAG, tags), new Value());
+
             checkpointLatencySensor = metrics.sensor("checkpoint-latency");
             checkpointLatencySensor.add(metrics.metricInstance(CHECKPOINT_LATENCY, tags), new Value());
             checkpointLatencySensor.add(metrics.metricInstance(CHECKPOINT_LATENCY_MAX, tags), new Max());

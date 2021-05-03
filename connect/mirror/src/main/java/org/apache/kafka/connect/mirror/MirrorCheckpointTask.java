@@ -102,6 +102,8 @@ public class MirrorCheckpointTask extends SourceTask {
                                     "refreshing idle consumers group offsets at target cluster");
         scheduler.scheduleRepeatingDelayed(this::syncGroupOffset, config.syncGroupOffsetsInterval(),
                                           "sync idle consumer group offset from source to target");
+        scheduler.scheduleRepeatingDelayed(this::sendConsumerGroupsMetrics, config.sendConsumerGroupsMetricsInterval(),
+                "Send metrics about consumer group replications");
     }
 
     @Override
@@ -189,10 +191,10 @@ public class MirrorCheckpointTask extends SourceTask {
             long downstreamOffset = offsetSyncStore.translateDownstream(topicPartition, upstreamOffset);
             Checkpoint tmpCheckpoint = new Checkpoint(group, renameTopicPartition(topicPartition),
                 upstreamOffset, downstreamOffset, offsetAndMetadata.metadata());
-            log.info("XXX tmpCheckpoint -- group({}) topicPartition({}) upstreamOffset({}) downstreamOffset({})", group, topicPartition, upstreamOffset, downstreamOffset);
+            log.trace("Creating checkpoint group({}) topicPartition({}) upstreamOffset({}) downstreamOffset({})", group, topicPartition, upstreamOffset, downstreamOffset);
             return tmpCheckpoint;
         } catch (NullPointerException e) {
-            log.error("XXX ERROR tmpCheckpoint -- group({}) topicPartition({}) offsetAndMetadata({}) {}", group, topicPartition, offsetAndMetadata, e);
+            log.error("Error creating checkpoint group({}) topicPartition({}) offsetAndMetadata({}) {}", group, topicPartition, offsetAndMetadata, e);
             return null;
         }
     }
@@ -325,4 +327,46 @@ public class MirrorCheckpointTask extends SourceTask {
         }
         return result;
     }
+
+
+    private void sendConsumerGroupsMetrics() {
+        log.trace("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
+
+        for (String group : consumerGroups) {
+
+            // Find source current and end offsets for all consumers groups
+            Map<TopicPartition, OffsetAndMetadata> sourceConsumerGroupOffsets = listConsumerGroupOffsets(group).entrySet().stream()
+                    .filter(x -> shouldCheckpointTopic(x.getKey().topic()));
+            List<TopicPartition> topicPartitions = new ArrayList<TopicPartition>(sourceConsumerGroupOffsets.keySet());
+            Map<TopicPartition, OffsetSpec> sourceTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
+            Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> sourceTopicPartitionEndOffsets = sourceAdminClient.listOffsets(sourceTopicPartitionOffsets).all().get();
+
+            // Find target current and end offsets for all consumers groups
+            Map<TopicPartition, OffsetAndMetadata> targetConsumerGroupOffsets = listTargetConsumerGroupOffsets(group).entrySet().stream()
+                    .filter(x -> shouldCheckpointTopic(x.getKey().topic()));
+            Map<TopicPartition, OffsetSpec> targetTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
+            Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> targetTopicPartitionEndOffsets = targetAdminClient.listOffsets(targetTopicPartitionOffsets).all().get();
+
+            for (TopicPartition topicPartition : topicPartitions) {
+                long upstreamOffset = sourceConsumerGroupOffsets.get(topicPartition).offset();
+                long lastUpstreamOffset = sourceTopicPartitionEndOffsets.get(topicPartition).offset();
+                long downstreamOffset = targetConsumerGroupOffsets.get(topicPartition).offset();
+                long lastDownstreamOffset = targetTopicPartitionEndOffsets.get(topicPartition).offset();
+
+                log.trace("recordConsumerGroupLag for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({}) downstreamOffset({}) lastDownstreamOffset({})",
+                        group, topicPartition, upstreamOffset, lastUpstreamOffset, downstreamOffset, lastDownstreamOffset);
+                metrics.recordConsumerGroupLag(topicPartition, group, upstreamOffset, lastUpstreamOffset, downstreamOffset, lastDownstreamOffset);
+            }
+        }
+    }
+
+    private Map<TopicPartition, OffsetAndMetadata> listTargetConsumerGroupOffsets(String group)
+            throws InterruptedException, ExecutionException {
+        if (stopping) {
+            // short circuit if stopping
+            return Collections.emptyMap();
+        }
+        return targetAdminClient.listConsumerGroupOffsets(group).partitionsToOffsetAndMetadata().get();
+    }
+
 }

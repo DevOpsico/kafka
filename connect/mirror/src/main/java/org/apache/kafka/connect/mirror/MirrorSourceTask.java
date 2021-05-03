@@ -206,7 +206,7 @@ public class MirrorSourceTask extends SourceTask {
         try {
             List<TopicPartition> topicPartitions = new ArrayList<>(Collections.singletonList(topicPartition));
             Map<TopicPartition, Long> endOffsets = consumerForEndOffset.endOffsets(topicPartitions);
-            metrics.recordLag(topicPartition, upstreamOffset, endOffsets.get(topicPartition));
+            metrics.recordTopicLag(topicPartition, upstreamOffset, endOffsets.get(topicPartition));
         } catch (KafkaException e) {
             log.warn("Failure maybeRecordLagMetric.", e);
         } finally {
