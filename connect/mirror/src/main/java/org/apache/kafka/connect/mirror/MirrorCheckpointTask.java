@@ -16,8 +16,7 @@
  */
 package org.apache.kafka.connect.mirror;
 
-import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.admin.ConsumerGroupDescription;
+import org.apache.kafka.clients.admin.*;
 import org.apache.kafka.common.ConsumerGroupState;
 import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.connect.source.SourceTask;
@@ -25,7 +24,6 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.RecordMetadata;
 
@@ -329,21 +327,27 @@ public class MirrorCheckpointTask extends SourceTask {
     }
 
 
-    private void sendConsumerGroupsMetrics() {
+    private void sendConsumerGroupsMetrics() throws InterruptedException {
         log.trace("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
 
         for (String group : consumerGroups) {
-
             // Find source current and end offsets for all consumers groups
-            Map<TopicPartition, OffsetAndMetadata> sourceConsumerGroupOffsets = listConsumerGroupOffsets(group).entrySet().stream()
-                    .filter(x -> shouldCheckpointTopic(x.getKey().topic()));
+            Map<TopicPartition, OffsetAndMetadata> sourceConsumerGroupOffsets = null;
+            try {
+                sourceConsumerGroupOffsets = (Map<TopicPartition, OffsetAndMetadata>) listConsumerGroupOffsets(group).entrySet().stream().filter(x -> shouldCheckpointTopic(x.getKey().topic()));
+            } catch (ExecutionException e) {
+                sourceConsumerGroupOffsets = Collections.emptyMap();
+            }
             List<TopicPartition> topicPartitions = new ArrayList<TopicPartition>(sourceConsumerGroupOffsets.keySet());
             Map<TopicPartition, OffsetSpec> sourceTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
             Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> sourceTopicPartitionEndOffsets = sourceAdminClient.listOffsets(sourceTopicPartitionOffsets).all().get();
 
             // Find target current and end offsets for all consumers groups
-            Map<TopicPartition, OffsetAndMetadata> targetConsumerGroupOffsets = listTargetConsumerGroupOffsets(group).entrySet().stream()
-                    .filter(x -> shouldCheckpointTopic(x.getKey().topic()));
+            try {
+                sourceConsumerGroupOffsets = (Map<TopicPartition, OffsetAndMetadata>) listTargetConsumerGroupOffsets(group).entrySet().stream().filter(x -> shouldCheckpointTopic(x.getKey().topic()));
+            } catch (ExecutionException e) {
+                sourceConsumerGroupOffsets = Collections.emptyMap();
+            }
             Map<TopicPartition, OffsetSpec> targetTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
             Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> targetTopicPartitionEndOffsets = targetAdminClient.listOffsets(targetTopicPartitionOffsets).all().get();
 
