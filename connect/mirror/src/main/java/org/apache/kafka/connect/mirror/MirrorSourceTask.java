@@ -331,7 +331,6 @@ public class MirrorSourceTask extends SourceTask {
             boolean shouldSendLagMetric = false;
             long upstreamStep = upstreamOffset - previousUpstreamOffset;
             if (upstreamStep >= maxOffsetLag) {
-                lastSyncUpstreamOffset = upstreamOffset;
                 shouldSendLagMetric = true;
             }
             previousUpstreamOffset = upstreamOffset;
