@@ -17,6 +17,7 @@
 package org.apache.kafka.connect.mirror;
 
 import org.apache.kafka.clients.admin.*;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.ConsumerGroupState;
 import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.connect.source.SourceTask;
@@ -62,6 +63,8 @@ public class MirrorCheckpointTask extends SourceTask {
     private Scheduler scheduler;
     private Map<String, Map<TopicPartition, OffsetAndMetadata>> idleConsumerGroupsOffset;
     private Map<String, List<Checkpoint>> checkpointsPerConsumerGroup;
+    private KafkaConsumer<byte[], byte[]> sourceConsumer;
+    private KafkaConsumer<byte[], byte[]> targetConsumer;
     public MirrorCheckpointTask() {}
 
     // for testing
@@ -92,6 +95,8 @@ public class MirrorCheckpointTask extends SourceTask {
         offsetSyncStore = new OffsetSyncStore(config);
         sourceAdminClient = AdminClient.create(config.sourceAdminConfig());
         targetAdminClient = AdminClient.create(config.targetAdminConfig());
+        sourceConsumer = MirrorUtils.newConsumer(config.sourceConsumerConfig());
+        targetConsumer = MirrorUtils.newConsumer(config.targetConsumerConfig());
         metrics = config.metrics();
         idleConsumerGroupsOffset = new HashMap<>();
         checkpointsPerConsumerGroup = new HashMap<>();
@@ -335,20 +340,22 @@ public class MirrorCheckpointTask extends SourceTask {
                 Map<TopicPartition, OffsetAndMetadata> sourceConsumerGroupOffsets = listConsumerGroupOffsets(group).entrySet().stream()
                         .filter(x -> shouldCheckpointTopic(x.getKey().topic())).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 List<TopicPartition> topicPartitions = new ArrayList<TopicPartition>(sourceConsumerGroupOffsets.keySet());
-                Map<TopicPartition, OffsetSpec> sourceTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
-                Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> sourceTopicPartitionEndOffsets = sourceAdminClient.listOffsets(sourceTopicPartitionOffsets).all().get();
+                // Map<TopicPartition, OffsetSpec> sourceTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
+                // Map<TopicPartition, Long> sourceTopicPartitionEndOffsets = sourceAdminClient.listOffsets(sourceTopicPartitionOffsets).all().get().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().offset()));
+                Map<TopicPartition, Long> sourceTopicPartitionEndOffsets = sourceConsumer.endOffsets(topicPartitions);
 
                 // Find target current and end offsets for all consumers groups
                 Map<TopicPartition, OffsetAndMetadata> targetConsumerGroupOffsets = listTargetConsumerGroupOffsets(group).entrySet().stream()
                         .filter(x -> shouldCheckpointTopic(x.getKey().topic())).collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                Map<TopicPartition, OffsetSpec> targetTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
-                Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> targetTopicPartitionEndOffsets = targetAdminClient.listOffsets(targetTopicPartitionOffsets).all().get();
+                // Map<TopicPartition, OffsetSpec> targetTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
+                // Map<TopicPartition, Long> targetTopicPartitionEndOffsets = targetAdminClient.listOffsets(sourceTopicPartitionOffsets).all().get().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().offset()));
+                Map<TopicPartition, Long> targetTopicPartitionEndOffsets = targetConsumer.endOffsets(topicPartitions);
 
                 for (TopicPartition topicPartition : topicPartitions) {
                     long upstreamOffset = sourceConsumerGroupOffsets.containsKey(topicPartition) ? sourceConsumerGroupOffsets.get(topicPartition).offset() : 0;
-                    long lastUpstreamOffset = sourceTopicPartitionEndOffsets.containsKey(topicPartition) ? sourceTopicPartitionEndOffsets.get(topicPartition).offset() : 0;
+                    long lastUpstreamOffset = sourceTopicPartitionEndOffsets.containsKey(topicPartition) ? sourceTopicPartitionEndOffsets.get(topicPartition) : 0;
                     long downstreamOffset = targetConsumerGroupOffsets.containsKey(topicPartition) ? targetConsumerGroupOffsets.get(topicPartition).offset() : 0;
-                    long lastDownstreamOffset = targetTopicPartitionEndOffsets.containsKey(topicPartition) ? targetTopicPartitionEndOffsets.get(topicPartition).offset() : 0;
+                    long lastDownstreamOffset = targetTopicPartitionEndOffsets.containsKey(topicPartition) ? targetTopicPartitionEndOffsets.get(topicPartition) : 0;
 
                     log.trace("recordConsumerGroupLag for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({}) downstreamOffset({}) lastDownstreamOffset({})",
                             group, topicPartition, upstreamOffset, lastUpstreamOffset, downstreamOffset, lastDownstreamOffset);
