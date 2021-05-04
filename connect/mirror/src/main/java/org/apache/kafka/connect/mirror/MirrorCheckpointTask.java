@@ -352,17 +352,19 @@ public class MirrorCheckpointTask extends SourceTask {
                 Map<TopicPartition, Long> targetTopicPartitionEndOffsets = targetConsumer.endOffsets(topicPartitions);
 
                 for (TopicPartition topicPartition : topicPartitions) {
-                    long upstreamOffset = sourceConsumerGroupOffsets.containsKey(topicPartition) ? sourceConsumerGroupOffsets.get(topicPartition).offset() : 0;
-                    long lastUpstreamOffset = sourceTopicPartitionEndOffsets.containsKey(topicPartition) ? sourceTopicPartitionEndOffsets.get(topicPartition) : 0;
-                    long downstreamOffset = targetConsumerGroupOffsets.containsKey(topicPartition) ? targetConsumerGroupOffsets.get(topicPartition).offset() : 0;
-                    long lastDownstreamOffset = targetTopicPartitionEndOffsets.containsKey(topicPartition) ? targetTopicPartitionEndOffsets.get(topicPartition) : 0;
+                    long upstreamOffset = sourceConsumerGroupOffsets.get(topicPartition).offset();
+                    long lastUpstreamOffset = sourceTopicPartitionEndOffsets.get(topicPartition);
+                    long downstreamOffset = targetConsumerGroupOffsets.get(topicPartition).offset();
+                    long lastDownstreamOffset = targetTopicPartitionEndOffsets.get(topicPartition);
 
                     log.trace("recordConsumerGroupLag for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({}) downstreamOffset({}) lastDownstreamOffset({})",
                             group, topicPartition, upstreamOffset, lastUpstreamOffset, downstreamOffset, lastDownstreamOffset);
-                    metrics.recordConsumerGroupLag(topicPartition, group, upstreamOffset, lastUpstreamOffset, downstreamOffset, lastDownstreamOffset);
+
+                    metrics.recordConsumerGroupSourceLag(topicPartition, group, upstreamOffset, lastUpstreamOffset);
+                    metrics.recordConsumerGroupTargetLag(topicPartition, group, downstreamOffset, lastDownstreamOffset);
                 }
             } catch (InterruptedException | ExecutionException e) {
-                log.error("Error querying for consumer group {} on cluster {}.", group, targetClusterAlias, e);
+                log.error("Error during sendConsumerGroupsMetrics {}", e);
             }
         }
     }

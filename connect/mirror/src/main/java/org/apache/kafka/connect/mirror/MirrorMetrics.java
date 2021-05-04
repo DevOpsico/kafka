@@ -99,9 +99,13 @@ class MirrorMetrics implements AutoCloseable {
             "checkpoint-latency-ms-avg", CHECKPOINT_CONNECTOR_GROUP,
             "Average time it takes consumer group offsets to replicate from source to target cluster.", GROUP_TAGS);
 
-    private static final MetricNameTemplate CONSUMER_GROUP_DIFFRENTIAL_LAG = new MetricNameTemplate(
-            "consumer-group-differential-lag", CHECKPOINT_CONNECTOR_GROUP,
-            "lag between source consumer group and target consumer group.", GROUP_TAGS);
+    private static final MetricNameTemplate CONSUMER_GROUP_SOURCE_LAG = new MetricNameTemplate(
+            "consumer-group-source-lag", CHECKPOINT_CONNECTOR_GROUP,
+            "lag of source consumer group.", GROUP_TAGS);
+
+    private static final MetricNameTemplate CONSUMER_GROUP_TARGET_LAG = new MetricNameTemplate(
+            "consumer-group-target-lag", CHECKPOINT_CONNECTOR_GROUP,
+            "lag of target consumer group.", GROUP_TAGS);
 
     private final Metrics metrics; 
     private final Map<TopicPartition, PartitionMetrics> partitionMetrics; 
@@ -140,9 +144,14 @@ class MirrorMetrics implements AutoCloseable {
         partitionMetrics.get(topicPartition).lagSensor.record((endOffset - upstreamOffset));
     }
 
-    void recordConsumerGroupLag(TopicPartition topicPartition, String group, long upstreamOffset, long lastUpstreamOffset, long downstreamOffset, long lastDownstreamOffset) {
-        long differentiallag = (lastUpstreamOffset - upstreamOffset) - (lastDownstreamOffset - downstreamOffset);
-        group(topicPartition, group).differentiallagSensor.record(differentiallag);
+    void recordConsumerGroupSourceLag(TopicPartition topicPartition, String group, long upstreamOffset, long lastUpstreamOffset) {
+        long targetLag = (lastUpstreamOffset - upstreamOffset);
+        group(topicPartition, group).targetLagSensor.record(targetLag);
+    }
+
+    void recordConsumerGroupTargetLag(TopicPartition topicPartition, String group, long downstreamOffset, long lastDownstreamOffset) {
+        long targetLag = (lastDownstreamOffset - downstreamOffset);
+        group(topicPartition, group).targetLagSensor.record(targetLag);
     }
 
     void recordAge(TopicPartition topicPartition, long ageMillis) {
@@ -210,7 +219,8 @@ class MirrorMetrics implements AutoCloseable {
 
     private class GroupMetrics {
         private final Sensor checkpointLatencySensor;
-        private final Sensor differentiallagSensor;
+        private final Sensor sourceLagSensor;
+        private final Sensor targetLagSensor;
 
         GroupMetrics(TopicPartition topicPartition, String group) {
             Map<String, String> tags = new LinkedHashMap<>();
@@ -222,8 +232,10 @@ class MirrorMetrics implements AutoCloseable {
 
             String prefix = topicPartition.topic() + "-" + topicPartition.partition() + "-" + group + "-";
 
-            differentiallagSensor = metrics.sensor(prefix + "consumer-group-differential-lag");
-            differentiallagSensor.add(metrics.metricInstance(CONSUMER_GROUP_DIFFRENTIAL_LAG, tags), new Value());
+            sourceLagSensor = metrics.sensor(prefix + "source-lag");
+            sourceLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_SOURCE_LAG, tags), new Value());
+            targetLagSensor = metrics.sensor(prefix + "target-lag");
+            targetLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_TARGET_LAG, tags), new Value());
 
             checkpointLatencySensor = metrics.sensor("checkpoint-latency");
             checkpointLatencySensor.add(metrics.metricInstance(CHECKPOINT_LATENCY, tags), new Value());
