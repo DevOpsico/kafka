@@ -36,7 +36,9 @@ import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Timestamp;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.concurrent.Semaphore;
 import java.time.Duration;
@@ -320,20 +322,24 @@ public class MirrorSourceTask extends SourceTask {
 
     static class LagMetricState {
         long previousUpstreamOffset = -1L;
+        Timestamp previousTimestamp = new Timestamp(System.currentTimeMillis());
         long maxOffsetLag;
+        long maxTimeSeconds = 30;
 
-        LagMetricState(long maxOffsetLag) {
-            this.maxOffsetLag = maxOffsetLag;
-        }
+        LagMetricState(long maxOffsetLag) { this.maxOffsetLag = maxOffsetLag; }
 
         // true if we should emit an offset sync
         boolean update(long upstreamOffset) {
             boolean shouldSendLagMetric = false;
             long upstreamStep = upstreamOffset - previousUpstreamOffset;
-            if (upstreamStep >= maxOffsetLag) {
+            Timestamp currentTime = new Timestamp(System.currentTimeMillis());
+            long diffSeconds = TimeUnit.SECONDS.convert((Math.abs(currentTime.getTime() - previousTimestamp.getTime())), TimeUnit.MILLISECONDS);
+
+            if (upstreamStep >= maxOffsetLag || diffSeconds >= maxTimeSeconds) {
                 shouldSendLagMetric = true;
+                previousUpstreamOffset = upstreamOffset;
+                previousTimestamp = currentTime;
             }
-            previousUpstreamOffset = upstreamOffset;
             return shouldSendLagMetric;
         }
     }

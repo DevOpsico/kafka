@@ -332,7 +332,7 @@ public class MirrorCheckpointTask extends SourceTask {
     }
 
     private void sendConsumerGroupsMetrics() {
-        log.info("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
+        log.trace("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
 
         for (String group : consumerGroups) {
             try {
@@ -350,21 +350,20 @@ public class MirrorCheckpointTask extends SourceTask {
                 // Map<TopicPartition, OffsetSpec> targetTopicPartitionOffsets = topicPartitions.stream().collect(Collectors.toMap(e -> e, e -> OffsetSpec.latest()));
                 // Map<TopicPartition, Long> targetTopicPartitionEndOffsets = targetAdminClient.listOffsets(sourceTopicPartitionOffsets).all().get().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().offset()));
                 Map<TopicPartition, Long> targetTopicPartitionEndOffsets = targetConsumer.endOffsets(topicPartitions);
-                log.info("sendConsumerGroupsMetrics for consumerGroups({})", group);
+
                 for (TopicPartition topicPartition : topicPartitions) {
                     long upstreamOffset = sourceConsumerGroupOffsets.get(topicPartition).offset();
                     long lastUpstreamOffset = sourceTopicPartitionEndOffsets.get(topicPartition);
-                    log.info("sendConsumerGroupsMetrics for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({})",
-                            group, topicPartition, upstreamOffset, lastUpstreamOffset);
+                    log.trace("sendConsumerGroupsMetrics for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({})", group, topicPartition, upstreamOffset, lastUpstreamOffset);
                     metrics.recordConsumerGroupSourceLag(topicPartition, group, upstreamOffset, lastUpstreamOffset);
                     if (targetConsumerGroupOffsets.containsKey(topicPartition)) {
                         long downstreamOffset = targetConsumerGroupOffsets.get(topicPartition).offset();
                         long lastDownstreamOffset = targetTopicPartitionEndOffsets.get(topicPartition);
-                        log.info("sendConsumerGroupsMetrics for group({}) topicPartition({}) downstreamOffset({}) lastDownstreamOffset({})",
-                                group, topicPartition, downstreamOffset, lastDownstreamOffset);
+                        log.trace("sendConsumerGroupsMetrics for group({}) topicPartition({}) downstreamOffset({}) lastDownstreamOffset({})", group, topicPartition, downstreamOffset, lastDownstreamOffset);
                         metrics.recordConsumerGroupTargetLag(topicPartition, group, downstreamOffset, lastDownstreamOffset);
                     } else {
                         log.info("sendConsumerGroupsMetrics : No offset found on target({}) for the consumer-group({}) topicPartition({})", targetClusterAlias, group, topicPartition);
+                        metrics.recordConsumerGroupTargetNoLag(topicPartition, group);
                     }
                 }
             } catch (InterruptedException | ExecutionException e) {

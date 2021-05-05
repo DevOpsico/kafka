@@ -193,7 +193,7 @@ public class MirrorConnectorConfig extends AbstractConfig {
 
     public static final String SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS = SEND_CONSUMER_GROUP_METRICS + INTERVAL_SECONDS_SUFFIX;
     private static final String SEND_CONSUMER_GROUPS_METRICS_INTERVAL_DOC = "Frequency of consumer group offset sync.";
-    public static final long SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT = 60;
+    public static final long SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT = 30;
 
     public static final String TOPIC_FILTER_CLASS = "topic.filter.class";
     private static final String TOPIC_FILTER_CLASS_DOC = "TopicFilter to use. Selects topics to replicate.";
@@ -449,9 +449,7 @@ public class MirrorConnectorConfig extends AbstractConfig {
 
     private static final Logger log = LoggerFactory.getLogger(MirrorCheckpointTask.class);
     Duration sendConsumerGroupsMetricsInterval() {
-        log.info("sendConsumerGroupsMetricsInterval {}", getBoolean(SYNC_GROUP_OFFSETS_ENABLED));
         if (getBoolean(SYNC_GROUP_OFFSETS_ENABLED)) {
-            log.info("sendConsumerGroupsMetricsInterval duration : {}", Duration.ofSeconds(getLong(SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS)));
             return Duration.ofSeconds(getLong(SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS));
         } else {
             // negative interval to disable

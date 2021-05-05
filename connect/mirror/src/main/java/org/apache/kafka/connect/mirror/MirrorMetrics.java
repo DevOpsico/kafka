@@ -100,11 +100,11 @@ class MirrorMetrics implements AutoCloseable {
             "Average time it takes consumer group offsets to replicate from source to target cluster.", GROUP_TAGS);
 
     private static final MetricNameTemplate CONSUMER_GROUP_SOURCE_LAG = new MetricNameTemplate(
-            "consumer-group-source-lag", CHECKPOINT_CONNECTOR_GROUP,
+            "source-lag", CHECKPOINT_CONNECTOR_GROUP,
             "lag of source consumer group.", GROUP_TAGS);
 
     private static final MetricNameTemplate CONSUMER_GROUP_TARGET_LAG = new MetricNameTemplate(
-            "consumer-group-target-lag", CHECKPOINT_CONNECTOR_GROUP,
+            "target-lag", CHECKPOINT_CONNECTOR_GROUP,
             "lag of target consumer group.", GROUP_TAGS);
 
     private final Metrics metrics; 
@@ -152,6 +152,10 @@ class MirrorMetrics implements AutoCloseable {
     void recordConsumerGroupTargetLag(TopicPartition topicPartition, String group, long downstreamOffset, long lastDownstreamOffset) {
         long targetLag = (lastDownstreamOffset - downstreamOffset);
         group(topicPartition, group).targetLagSensor.record(targetLag);
+    }
+
+    void recordConsumerGroupTargetNoLag(TopicPartition topicPartition, String group) {
+        group(topicPartition, group).targetLagSensor.record(-1);
     }
 
     void recordAge(TopicPartition topicPartition, long ageMillis) {
@@ -230,11 +234,9 @@ class MirrorMetrics implements AutoCloseable {
             tags.put("topic", topicPartition.topic());
             tags.put("partition", Integer.toString(topicPartition.partition()));
 
-            String prefix = topicPartition.topic() + "-" + topicPartition.partition() + "-" + group + "-";
-
-            sourceLagSensor = metrics.sensor(prefix + "source-lag");
+            sourceLagSensor = metrics.sensor("source-lag");
             sourceLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_SOURCE_LAG, tags), new Value());
-            targetLagSensor = metrics.sensor(prefix + "target-lag");
+            targetLagSensor = metrics.sensor("target-lag");
             targetLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_TARGET_LAG, tags), new Value());
 
             checkpointLatencySensor = metrics.sensor("checkpoint-latency");
