@@ -26,6 +26,9 @@ import org.apache.kafka.common.metrics.MetricsContext;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.common.utils.ConfigUtils;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.apache.kafka.clients.consumer.ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG;
 import static org.apache.kafka.clients.consumer.ConsumerConfig.AUTO_OFFSET_RESET_CONFIG;
 
@@ -444,8 +447,11 @@ public class MirrorConnectorConfig extends AbstractConfig {
         }
     }
 
+    private static final Logger log = LoggerFactory.getLogger(MirrorCheckpointTask.class);
     Duration sendConsumerGroupsMetricsInterval() {
+        log.info("sendConsumerGroupsMetricsInterval {}", getBoolean(SYNC_GROUP_OFFSETS_ENABLED));
         if (getBoolean(SYNC_GROUP_OFFSETS_ENABLED)) {
+            log.info("sendConsumerGroupsMetricsInterval duration : {}", Duration.ofSeconds(getLong(SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS)));
             return Duration.ofSeconds(getLong(SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS));
         } else {
             // negative interval to disable

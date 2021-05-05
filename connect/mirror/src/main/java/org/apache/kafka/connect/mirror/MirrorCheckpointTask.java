@@ -332,9 +332,10 @@ public class MirrorCheckpointTask extends SourceTask {
     }
 
     private void sendConsumerGroupsMetrics() {
-        log.trace("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
+        log.info("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
 
         for (String group : consumerGroups) {
+            log.info("sendConsumerGroupsMetrics for consumerGroups({})", group);
             try {
                 // Find source current and end offsets for all consumers groups
                 Map<TopicPartition, OffsetAndMetadata> sourceConsumerGroupOffsets = listConsumerGroupOffsets(group).entrySet().stream()
@@ -357,7 +358,7 @@ public class MirrorCheckpointTask extends SourceTask {
                     long downstreamOffset = targetConsumerGroupOffsets.get(topicPartition).offset();
                     long lastDownstreamOffset = targetTopicPartitionEndOffsets.get(topicPartition);
 
-                    log.trace("recordConsumerGroupLag for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({}) downstreamOffset({}) lastDownstreamOffset({})",
+                    log.info("sendConsumerGroupsMetrics for group({}) topicPartition({}) upstreamOffset({}) lastUpstreamOffset({}) downstreamOffset({}) lastDownstreamOffset({})",
                             group, topicPartition, upstreamOffset, lastUpstreamOffset, downstreamOffset, lastDownstreamOffset);
 
                     metrics.recordConsumerGroupSourceLag(topicPartition, group, upstreamOffset, lastUpstreamOffset);
