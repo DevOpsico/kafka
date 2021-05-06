@@ -105,7 +105,7 @@ public class MirrorCheckpointTask extends SourceTask {
                                     "refreshing idle consumers group offsets at target cluster");
         scheduler.scheduleRepeatingDelayed(this::syncGroupOffset, config.syncGroupOffsetsInterval(),
                                           "sync idle consumer group offset from source to target");
-        scheduler.scheduleRepeatingDelayed(this::sendConsumerGroupsMetrics, config.sendConsumerGroupsMetricsInterval(),
+        scheduler.scheduleRepeatingDelayed(this::sendConsumerGroupsMetrics, config.emitConsumerGroupsMetricsInterval(),
                 "Send metrics about consumer group replications");
     }
 

@@ -57,6 +57,7 @@ public class MirrorSourceTask extends SourceTask {
     private String offsetSyncsTopic;
     private Duration pollTimeout;
     private long maxOffsetLag;
+    private long maxTopicLagMetricsInterval;
     private Map<TopicPartition, PartitionState> partitionStates;
     private Map<TopicPartition, LagMetricState> lagMetricStates;
     private ReplicationPolicy replicationPolicy;
@@ -73,6 +74,7 @@ public class MirrorSourceTask extends SourceTask {
         this.sourceClusterAlias = sourceClusterAlias;
         this.replicationPolicy = replicationPolicy;
         this.maxOffsetLag = maxOffsetLag;
+        this.maxTopicLagMetricsInterval = 30;
         consumerAccess = new Semaphore(1);
         consumerForEndOffsetAccess = new Semaphore(1);
     }
@@ -87,6 +89,7 @@ public class MirrorSourceTask extends SourceTask {
         metrics = config.metrics();
         pollTimeout = config.consumerPollTimeout();
         maxOffsetLag = config.maxOffsetLag();
+        maxTopicLagMetricsInterval = config.maxTopicLagMetricsInterval();
         replicationPolicy = config.replicationPolicy();
         partitionStates = new HashMap<>();
         lagMetricStates = new HashMap<>();
@@ -195,7 +198,8 @@ public class MirrorSourceTask extends SourceTask {
     }
     private void maybeRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
         LagMetricState lagMetricState =
-                lagMetricStates.computeIfAbsent(topicPartition, x -> new LagMetricState(maxOffsetLag));
+                lagMetricStates.computeIfAbsent(topicPartition, x -> new LagMetricState(
+                        maxOffsetLag, maxTopicLagMetricsInterval ));
         if (lagMetricState.update(upstreamOffset)) {
             sendRecordLagMetric(topicPartition, upstreamOffset);
         }
@@ -322,11 +326,15 @@ public class MirrorSourceTask extends SourceTask {
 
     static class LagMetricState {
         long previousUpstreamOffset = -1L;
-        Timestamp previousTimestamp = new Timestamp(System.currentTimeMillis());
+        Timestamp previousTimestamp;
         long maxOffsetLag;
-        long maxTimeSeconds = 30;
+        long maxTopicLagMetricsInterval;
 
-        LagMetricState(long maxOffsetLag) { this.maxOffsetLag = maxOffsetLag; }
+        LagMetricState(long maxOffsetLag, long maxTopicLagMetricsInterval) {
+            this.maxOffsetLag = maxOffsetLag;
+            this.maxTopicLagMetricsInterval = maxTopicLagMetricsInterval;
+            this.previousTimestamp = new Timestamp(System.currentTimeMillis());
+        }
 
         // true if we should emit an offset sync
         boolean update(long upstreamOffset) {
@@ -335,7 +343,7 @@ public class MirrorSourceTask extends SourceTask {
             Timestamp currentTime = new Timestamp(System.currentTimeMillis());
             long diffSeconds = TimeUnit.SECONDS.convert((Math.abs(currentTime.getTime() - previousTimestamp.getTime())), TimeUnit.MILLISECONDS);
 
-            if (upstreamStep >= maxOffsetLag || diffSeconds >= maxTimeSeconds) {
+            if (upstreamStep >= maxOffsetLag || diffSeconds >= maxTopicLagMetricsInterval) {
                 shouldSendLagMetric = true;
                 previousUpstreamOffset = upstreamOffset;
                 previousTimestamp = currentTime;

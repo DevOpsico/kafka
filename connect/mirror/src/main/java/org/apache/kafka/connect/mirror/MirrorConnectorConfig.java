@@ -76,7 +76,8 @@ public class MirrorConnectorConfig extends AbstractConfig {
     protected static final String EMIT_HEARTBEATS = "emit.heartbeats";
     protected static final String EMIT_CHECKPOINTS = "emit.checkpoints";
     protected static final String SYNC_GROUP_OFFSETS = "sync.group.offsets";
-    protected static final String SEND_CONSUMER_GROUP_METRICS = "send.consumer_groups.metrics";
+    protected static final String EMIT_TOPIC_LAG_METRICS = "refresh.metrics.topic_lag";
+    protected static final String EMIT_CONSUMER_GROUP_METRICS = "refresh.consumer_groups.metrics";
 
     public static final String ENABLED = "enabled";
     private static final String ENABLED_DOC = "Whether to replicate source->target.";
@@ -191,9 +192,9 @@ public class MirrorConnectorConfig extends AbstractConfig {
     private static final String SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DOC = "Frequency of consumer group offset sync.";
     public static final long SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DEFAULT = 60;
 
-    public static final String SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS = SEND_CONSUMER_GROUP_METRICS + INTERVAL_SECONDS_SUFFIX;
-    private static final String SEND_CONSUMER_GROUPS_METRICS_INTERVAL_DOC = "Frequency of consumer group offset sync.";
-    public static final long SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT = 30;
+    public static final String EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS = EMIT_CONSUMER_GROUP_METRICS + INTERVAL_SECONDS_SUFFIX;
+    private static final String EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_DOC = "Frequency of consumer group offset sync.";
+    public static final long EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT = 30;
 
     public static final String TOPIC_FILTER_CLASS = "topic.filter.class";
     private static final String TOPIC_FILTER_CLASS_DOC = "TopicFilter to use. Selects topics to replicate.";
@@ -209,6 +210,10 @@ public class MirrorConnectorConfig extends AbstractConfig {
     public static final String OFFSET_LAG_MAX = "offset.lag.max";
     private static final String OFFSET_LAG_MAX_DOC = "How out-of-sync a remote partition can be before it is resynced.";
     public static final long OFFSET_LAG_MAX_DEFAULT = 100L;
+
+    public static final String EMIT_TOPIC_LAG_METRICS_INTERVAL_SECONDS = EMIT_TOPIC_LAG_METRICS + INTERVAL_SECONDS_SUFFIX;
+    private static final String EMIT_TOPIC_LAG_METRICS_INTERVAL_DOC = "Max frequency to send lag metrics related topics";
+    public static final long EMIT_TOPIC_LAG_METRICS_INTERVAL_DEFAULT = 30;
 
     protected static final String SOURCE_CLUSTER_PREFIX = MirrorMakerConfig.SOURCE_CLUSTER_PREFIX;
     protected static final String TARGET_CLUSTER_PREFIX = MirrorMakerConfig.TARGET_CLUSTER_PREFIX;
@@ -352,6 +357,10 @@ public class MirrorConnectorConfig extends AbstractConfig {
         return getLong(OFFSET_LAG_MAX);
     }
 
+    long maxTopicLagMetricsInterval() {
+        return getLong(EMIT_TOPIC_LAG_METRICS_INTERVAL_SECONDS);
+    }
+
     Duration emitHeartbeatsInterval() {
         if (getBoolean(EMIT_HEARTBEATS_ENABLED)) {
             return Duration.ofSeconds(getLong(EMIT_HEARTBEATS_INTERVAL_SECONDS));
@@ -448,9 +457,9 @@ public class MirrorConnectorConfig extends AbstractConfig {
     }
 
     private static final Logger log = LoggerFactory.getLogger(MirrorCheckpointTask.class);
-    Duration sendConsumerGroupsMetricsInterval() {
+    Duration emitConsumerGroupsMetricsInterval() {
         if (getBoolean(SYNC_GROUP_OFFSETS_ENABLED)) {
-            return Duration.ofSeconds(getLong(SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS));
+            return Duration.ofSeconds(getLong(EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS));
         } else {
             // negative interval to disable
             return Duration.ofMillis(-1);
@@ -638,11 +647,11 @@ public class MirrorConnectorConfig extends AbstractConfig {
                     ConfigDef.Importance.LOW,
                     SYNC_GROUP_OFFSETS_INTERVAL_SECONDS_DOC)
             .define(
-                    SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS,
+                    EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS,
                     ConfigDef.Type.LONG,
-                    SEND_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT,
+                    EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_SECONDS_DEFAULT,
                     ConfigDef.Importance.LOW,
-                    SEND_CONSUMER_GROUPS_METRICS_INTERVAL_DOC)
+                    EMIT_CONSUMER_GROUPS_METRICS_INTERVAL_DOC)
             .define(
                     REPLICATION_POLICY_CLASS,
                     ConfigDef.Type.CLASS,
@@ -685,6 +694,12 @@ public class MirrorConnectorConfig extends AbstractConfig {
                     OFFSET_LAG_MAX_DEFAULT,
                     ConfigDef.Importance.LOW,
                     OFFSET_LAG_MAX_DOC)
+            .define(
+                    EMIT_TOPIC_LAG_METRICS_INTERVAL_SECONDS,
+                    ConfigDef.Type.LONG,
+                    EMIT_TOPIC_LAG_METRICS_INTERVAL_DEFAULT,
+                    ConfigDef.Importance.LOW,
+                    EMIT_TOPIC_LAG_METRICS_INTERVAL_DOC)
             .define(
                     CommonClientConfigs.METRIC_REPORTER_CLASSES_CONFIG,
                     ConfigDef.Type.LIST,
