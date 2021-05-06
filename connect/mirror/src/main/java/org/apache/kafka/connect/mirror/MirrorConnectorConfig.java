@@ -77,7 +77,7 @@ public class MirrorConnectorConfig extends AbstractConfig {
     protected static final String EMIT_CHECKPOINTS = "emit.checkpoints";
     protected static final String SYNC_GROUP_OFFSETS = "sync.group.offsets";
     protected static final String EMIT_TOPIC_LAG_METRICS = "refresh.metrics.topic_lag";
-    protected static final String EMIT_CONSUMER_GROUP_METRICS = "refresh.consumer_groups.metrics";
+    protected static final String EMIT_CONSUMER_GROUP_METRICS = "refresh.metrics.consumer_groups";
 
     public static final String ENABLED = "enabled";
     private static final String ENABLED_DOC = "Whether to replicate source->target.";

@@ -201,11 +201,11 @@ public class MirrorSourceTask extends SourceTask {
                 lagMetricStates.computeIfAbsent(topicPartition, x -> new LagMetricState(
                         maxOffsetLag, maxTopicLagMetricsInterval ));
         if (lagMetricState.update(upstreamOffset)) {
-            sendRecordLagMetric(topicPartition, upstreamOffset);
+            emitRecordLagMetric(topicPartition, upstreamOffset);
         }
     }
 
-    private void sendRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
+    private void emitRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
         if (!consumerForEndOffsetAccess.tryAcquire()) {
             return;
         }
