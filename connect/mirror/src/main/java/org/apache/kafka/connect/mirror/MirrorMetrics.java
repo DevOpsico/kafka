@@ -236,6 +236,8 @@ class MirrorMetrics implements AutoCloseable {
         private final Sensor differentialLagSensor;
 
         GroupMetrics(TopicPartition topicPartition, String group) {
+            String prefix = group  + "-" + topicPartition.topic() + "-" + topicPartition.partition() + "-";
+
             Map<String, String> tags = new LinkedHashMap<>();
             tags.put("source", source); 
             tags.put("target", target); 
@@ -243,11 +245,11 @@ class MirrorMetrics implements AutoCloseable {
             tags.put("topic", topicPartition.topic());
             tags.put("partition", Integer.toString(topicPartition.partition()));
 
-            sourceLagSensor = metrics.sensor("source-lag");
+            sourceLagSensor = metrics.sensor(prefix + "source-lag");
             sourceLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_SOURCE_LAG, tags), new Value());
-            targetLagSensor = metrics.sensor("target-lag");
+            targetLagSensor = metrics.sensor(prefix + "target-lag");
             targetLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_TARGET_LAG, tags), new Value());
-            differentialLagSensor = metrics.sensor("differential-lag");
+            differentialLagSensor = metrics.sensor(prefix + "differential-lag");
             differentialLagSensor.add(metrics.metricInstance(CONSUMER_GROUP_DIFF_LAG, tags), new Value());
 
             checkpointLatencySensor = metrics.sensor("checkpoint-latency");
