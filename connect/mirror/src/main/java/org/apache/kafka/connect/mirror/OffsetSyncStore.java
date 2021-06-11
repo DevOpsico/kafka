@@ -86,7 +86,6 @@ class OffsetSyncStore implements AutoCloseable {
     }
 
     protected void handleRecord(ConsumerRecord<byte[], byte[]> record) {
-        log.info("offsetSyncStore - {}-{}:{}", record.topic(), record.partition(), record.offset());
         OffsetSync offsetSync = OffsetSync.deserializeRecord(record);
         TopicPartition sourceTopicPartition = offsetSync.topicPartition();
         offsetSyncs.put(sourceTopicPartition, offsetSync);

@@ -332,7 +332,7 @@ public class MirrorCheckpointTask extends SourceTask {
     }
 
     private void sendConsumerGroupsMetrics() {
-        log.trace("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
+        log.info("sendConsumerGroupsMetrics for consumerGroups({})", consumerGroups);
 
         for (String group : consumerGroups) {
             try {
@@ -362,6 +362,7 @@ public class MirrorCheckpointTask extends SourceTask {
                         long lastDownstreamOffset = targetTopicPartitionEndOffsets.get(topicPartition);
                         long targetLag = (lastDownstreamOffset - downstreamOffset);
                         log.trace("sendConsumerGroupsMetrics for group({}) topicPartition({}) downstreamOffset({}) lastDownstreamOffset({}) lag({})", group, topicPartition, downstreamOffset, lastDownstreamOffset, targetLag);
+                        log.info("differential-lag for group({}) topicPartition({}) sourceLag({}) targetLag({}) difflag({})", group, topicPartition, sourceLag, targetLag, (targetLag-sourceLag));
                         metrics.recordConsumerGroupTargetLag(topicPartition, group, targetLag);
                         metrics.recordConsumerGroupTargetDifferentialLag(topicPartition, group, sourceLag, targetLag);
                     } else {

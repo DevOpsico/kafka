@@ -121,14 +121,14 @@ public class MirrorSourceTask extends SourceTask {
         try {
             consumerAccess.acquire();
         } catch (InterruptedException e) {
-            log.warn("Interrupted waiting for access to consumer. Will try closing anyway."); 
+            log.warn("Interrupted waiting for access to consumer. Will try closing anyway.");
         }
         Utils.closeQuietly(consumer, "source consumer");
         Utils.closeQuietly(offsetProducer, "offset producer");
         Utils.closeQuietly(metrics, "metrics");
         log.info("Stopping {} took {} ms.", Thread.currentThread().getName(), System.currentTimeMillis() - start);
     }
-   
+
     @Override
     public String version() {
         return "1";
@@ -172,7 +172,7 @@ public class MirrorSourceTask extends SourceTask {
             consumerAccess.release();
         }
     }
- 
+
     @Override
     public void commitRecord(SourceRecord record, RecordMetadata metadata) {
         try {
@@ -199,7 +199,7 @@ public class MirrorSourceTask extends SourceTask {
     private void maybeRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
         LagMetricState lagMetricState =
                 lagMetricStates.computeIfAbsent(topicPartition, x -> new LagMetricState(
-                        maxOffsetLag, maxTopicLagMetricsInterval ));
+                        maxTopicLagMetricsInterval ));
         if (lagMetricState.update(upstreamOffset)) {
             emitRecordLagMetric(topicPartition, upstreamOffset);
         }
@@ -207,11 +207,13 @@ public class MirrorSourceTask extends SourceTask {
 
     private void emitRecordLagMetric(TopicPartition topicPartition, long upstreamOffset) {
         if (!consumerForEndOffsetAccess.tryAcquire()) {
+            log.trace("consumerForEndOffsetAccess - No lock available");
             return;
         }
         try {
             List<TopicPartition> topicPartitions = new ArrayList<>(Collections.singletonList(topicPartition));
             Map<TopicPartition, Long> endOffsets = consumerForEndOffset.endOffsets(topicPartitions);
+            log.info("topic-replication-lag tp:{} lag:{}", topicPartition, (endOffsets.get(topicPartition) - upstreamOffset));
             metrics.recordTopicLag(topicPartition, upstreamOffset, endOffsets.get(topicPartition));
         } catch (KafkaException e) {
             log.warn("Failure maybeRecordLagMetric.", e);
@@ -250,7 +252,7 @@ public class MirrorSourceTask extends SourceTask {
             outstandingOffsetSyncs.release();
         });
     }
- 
+
     private Map<TopicPartition, Long> loadOffsets(Set<TopicPartition> topicPartitions) {
         return topicPartitions.stream().collect(Collectors.toMap(x -> x, x -> loadOffset(x)));
     }
@@ -261,7 +263,7 @@ public class MirrorSourceTask extends SourceTask {
         return MirrorUtils.unwrapOffset(wrappedOffset) + 1;
     }
 
-    // visible for testing 
+    // visible for testing
     SourceRecord convertRecord(ConsumerRecord<byte[], byte[]> record) {
         String targetTopic = formatRemoteTopic(record.topic());
         Headers headers = convertHeaders(record);
@@ -325,13 +327,10 @@ public class MirrorSourceTask extends SourceTask {
     }
 
     static class LagMetricState {
-        long previousUpstreamOffset = -1L;
         Timestamp previousTimestamp;
-        long maxOffsetLag;
         long maxTopicLagMetricsInterval;
 
-        LagMetricState(long maxOffsetLag, long maxTopicLagMetricsInterval) {
-            this.maxOffsetLag = maxOffsetLag;
+        LagMetricState(long maxTopicLagMetricsInterval) {
             this.maxTopicLagMetricsInterval = maxTopicLagMetricsInterval;
             this.previousTimestamp = new Timestamp(System.currentTimeMillis());
         }
@@ -339,13 +338,11 @@ public class MirrorSourceTask extends SourceTask {
         // true if we should emit an offset sync
         boolean update(long upstreamOffset) {
             boolean shouldSendLagMetric = false;
-            long upstreamStep = upstreamOffset - previousUpstreamOffset;
             Timestamp currentTime = new Timestamp(System.currentTimeMillis());
             long diffSeconds = TimeUnit.SECONDS.convert((Math.abs(currentTime.getTime() - previousTimestamp.getTime())), TimeUnit.MILLISECONDS);
 
-            if (upstreamStep >= maxOffsetLag || diffSeconds >= maxTopicLagMetricsInterval) {
+            if (diffSeconds >= maxTopicLagMetricsInterval) {
                 shouldSendLagMetric = true;
-                previousUpstreamOffset = upstreamOffset;
                 previousTimestamp = currentTime;
             }
             return shouldSendLagMetric;
